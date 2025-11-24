@@ -3,9 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:fatique_aps/pages/result_page.dart';
-import 'package:image/image.dart' as img;
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 
 class PreviewPredictPage extends StatefulWidget {
   final File imageFile;
@@ -26,10 +23,7 @@ class _PreviewPredictPageState extends State<PreviewPredictPage> {
       // API endpoint
       const String apiUrl = 'https://Mowzaaaa-fatigue-api.hf.space/predict';
 
-      // Compress image before sending to improve performance
-      final File compressedImage = await _compressImage(widget.imageFile);
-
-      // Create multipart request
+      // Create multipart request - send original image (no compression)
       var request = http.MultipartRequest('POST', Uri.parse(apiUrl));
 
       // Add image file with correct field name and content type
@@ -37,13 +31,13 @@ class _PreviewPredictPageState extends State<PreviewPredictPage> {
       request.files.add(
         await http.MultipartFile.fromPath(
           'file', // Changed from 'image' to 'file'
-          compressedImage.path,
-          filename: compressedImage.path.split('/').last,
+          widget.imageFile.path,
+          filename: widget.imageFile.path.split('/').last,
         ),
       );
 
       debugPrint('Mengirim request ke: $apiUrl');
-      debugPrint('File path: ${compressedImage.path}');
+      debugPrint('File path: ${widget.imageFile.path}');
 
       // Send request with timeout (30 seconds)
       var streamedResponse = await request.send().timeout(
@@ -91,7 +85,8 @@ class _PreviewPredictPageState extends State<PreviewPredictPage> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => ResultPage(
-                    imageFile: widget.imageFile,
+                    imageFile:
+                        widget.imageFile, // Gunakan gambar original yang dikirim ke API
                     result: resultData,
                   ),
                 ),
@@ -110,7 +105,8 @@ class _PreviewPredictPageState extends State<PreviewPredictPage> {
               context,
               MaterialPageRoute(
                 builder: (_) => ResultPage(
-                  imageFile: widget.imageFile,
+                  imageFile:
+                      widget.imageFile, // Gunakan gambar original yang dikirim ke API
                   result: jsonResponse,
                 ),
               ),
@@ -164,49 +160,6 @@ class _PreviewPredictPageState extends State<PreviewPredictPage> {
       if (mounted) {
         setState(() => _isPredicting = false);
       }
-    }
-  }
-
-  // Compress image to reduce upload time and API processing time
-  Future<File> _compressImage(File imageFile) async {
-    try {
-      debugPrint('Kompres gambar dimulai...');
-      final bytes = await imageFile.readAsBytes();
-      img.Image? image = img.decodeImage(bytes);
-
-      if (image == null) return imageFile;
-
-      // Resize if image is too large (max 1920px on longest side)
-      // This matches typical API requirements and speeds up processing
-      int maxSize = 1920;
-      if (image.width > maxSize || image.height > maxSize) {
-        if (image.width > image.height) {
-          image = img.copyResize(image, width: maxSize);
-        } else {
-          image = img.copyResize(image, height: maxSize);
-        }
-        debugPrint('Image resized to: ${image.width}x${image.height}');
-      }
-
-      // Compress to JPEG with 85% quality (good balance of quality and size)
-      final directory = await getTemporaryDirectory();
-      final targetPath = path.join(
-        directory.path,
-        '${DateTime.now().millisecondsSinceEpoch}_compressed.jpg',
-      );
-      final compressedFile = File(targetPath);
-      await compressedFile.writeAsBytes(img.encodeJpg(image, quality: 85));
-
-      final originalSize = await imageFile.length();
-      final compressedSize = await compressedFile.length();
-      debugPrint(
-        'Kompresi selesai: ${(originalSize / 1024).toStringAsFixed(1)}KB -> ${(compressedSize / 1024).toStringAsFixed(1)}KB',
-      );
-
-      return compressedFile;
-    } catch (e) {
-      debugPrint('Error kompres gambar: $e');
-      return imageFile; // Return original if compression fails
     }
   }
 

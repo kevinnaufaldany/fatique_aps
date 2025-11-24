@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
 
 class ResultPage extends StatefulWidget {
   final File imageFile;
@@ -446,82 +447,118 @@ class _ResultPageState extends State<ResultPage> {
     );
   }
 
-  Widget _buildImageWithBoundingBoxes(List<dynamic> bboxes) {
-    // Get all results for drawing all bounding boxes
-    final List<dynamic> allResults =
-        widget.result['all_results'] ?? [widget.result];
-
+  Widget _buildImageWithBoundingBoxes(List<dynamic> allResults) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return Stack(
-          children: [
-            // Original Image
-            Image.file(widget.imageFile, fit: BoxFit.contain),
+        return FutureBuilder<img.Image?>(
+          future: _getImageSize(widget.imageFile),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-            // Draw all bounding boxes for all faces
-            ...allResults.asMap().entries.map((entry) {
-              final index = entry.key;
-              final result = entry.value;
-              final bbox = result['bounding_box'];
-              if (bbox != null) {
-                return _buildBoundingBox(result, index);
-              }
-              return const SizedBox.shrink();
-            }).toList(),
-          ],
+            final original = snapshot.data!;
+            final imgW = original.width.toDouble();
+            final imgH = original.height.toDouble();
+
+            // SOLUSI: Pakai FittedBox untuk scale gambar DAN bounding box bersama-sama
+            // Koordinat bounding box langsung pakai nilai asli dari API (1:1 mapping)
+            return FittedBox(
+              fit: BoxFit.contain,
+              child: SizedBox(
+                width: imgW,
+                height: imgH,
+                child: Stack(
+                  children: [
+                    // Gambar ukuran asli (FittedBox yang scale otomatis)
+                    Image.file(
+                      widget.imageFile,
+                      width: imgW,
+                      height: imgH,
+                      fit: BoxFit.fill,
+                    ),
+
+                    // Bounding box digambar 1:1 terhadap koordinat API
+                    ...allResults.asMap().entries.map((entry) {
+                      return _drawBBox(entry.value, entry.key);
+                    }).toList(),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildBoundingBox(dynamic result, int index) {
+  // Fungsi gambar bounding box - pakai koordinat asli (FittedBox yang handle scaling)
+  Widget _drawBBox(dynamic result, int index) {
     final bbox = result['bounding_box'];
     if (bbox == null) return const SizedBox.shrink();
 
-    // Parse bbox coordinates [x1, y1, x2, y2]
-    final double x1 = (bbox[0] ?? 0.0).toDouble();
-    final double y1 = (bbox[1] ?? 0.0).toDouble();
-    final double x2 = (bbox[2] ?? 0.0).toDouble();
-    final double y2 = (bbox[3] ?? 0.0).toDouble();
+    final x1 = bbox[0].toDouble();
+    final y1 = bbox[1].toDouble();
+    final x2 = bbox[2].toDouble();
+    final y2 = bbox[3].toDouble();
 
-    // Calculate width and height from coordinates
-    final double width = x2 - x1;
-    final double height = y2 - y1;
+    final w = x2 - x1;
+    final h = y2 - y1;
 
-    final String label = result['prediction'] ?? 'Unknown';
-    final double confidence = (result['confidence'] ?? 0.0).toDouble();
-
-    // FIX: NonFatigue = Green, Fatigue = Red
-    final isFatigue =
-        label.toLowerCase().contains('fatigue') &&
+    final label = result['prediction'] ?? 'Unknown';
+    final conf = (result['confidence'] ?? 0.0).toDouble() * 100;
+    final isFatigue = label.toLowerCase().contains('fatigue') &&
         !label.toLowerCase().contains('non');
-    final Color boxColor = isFatigue ? Colors.red : Colors.green;
+
+    final color = isFatigue ? Colors.red : Colors.green;
 
     return Positioned(
       left: x1,
       top: y1,
-      child: Container(
-        width: width,
-        height: height,
-        decoration: BoxDecoration(
-          border: Border.all(color: boxColor, width: 3),
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Stack(
-          children: [
-            // Top-left label with prediction and confidence
-            Align(
-              alignment: Alignment.topLeft,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: boxColor,
-                  borderRadius: const BorderRadius.only(
-                    bottomRight: Radius.circular(4),
-                  ),
+      width: w,
+      height: h,
+      child: Stack(
+        children: [
+          // Border bounding box
+          Container(
+            decoration: BoxDecoration(
+              border: Border.all(color: color, width: 3),
+            ),
+          ),
+
+          // Label di atas
+          Positioned(
+            top: 0,
+            left: 0,
+            child: Container(
+              color: color,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(
+                '$label (${conf.toStringAsFixed(0)}%)',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
                 ),
+              ),
+            ),
+          ),
+
+          // Badge nomor
+          Positioned(
+            bottom: 4,
+            right: 4,
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: Center(
                 child: Text(
-                  '${index + 1}. ${label} ${(confidence * 100).toStringAsFixed(0)}%',
+                  '${index + 1}',
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 12,
@@ -530,33 +567,17 @@ class _ResultPageState extends State<ResultPage> {
                 ),
               ),
             ),
-            // Bottom-right face number badge
-            Align(
-              alignment: Alignment.bottomRight,
-              child: Container(
-                margin: const EdgeInsets.all(4),
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: boxColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                ),
-                child: Center(
-                  child: Text(
-                    '${index + 1}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
+
+  // Fungsi baca ukuran gambar asli
+  Future<img.Image?> _getImageSize(File file) async {
+    final bytes = await file.readAsBytes();
+    return img.decodeImage(bytes);
+  }
+
+
 }
