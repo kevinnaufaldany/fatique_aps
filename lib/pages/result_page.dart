@@ -507,7 +507,8 @@ class _ResultPageState extends State<ResultPage> {
 
     final label = result['prediction'] ?? 'Unknown';
     final conf = (result['confidence'] ?? 0.0).toDouble() * 100;
-    final isFatigue = label.toLowerCase().contains('fatigue') &&
+    final isFatigue =
+        label.toLowerCase().contains('fatigue') &&
         !label.toLowerCase().contains('non');
 
     final color = isFatigue ? Colors.red : Colors.green;
@@ -578,6 +579,4 @@ class _ResultPageState extends State<ResultPage> {
     final bytes = await file.readAsBytes();
     return img.decodeImage(bytes);
   }
-
-
 }
