@@ -261,7 +261,7 @@ class _PreviewPredictPageState extends State<PreviewPredictPage> {
                       ),
                       SizedBox(width: 12),
                       Text(
-                        'Mengolah. Mohon tunggu sebentar.',
+                        'Memprediksi. Mohon tunggu sebentar.',
                         style: TextStyle(color: Colors.black54, fontSize: 14),
                       ),
                     ],
