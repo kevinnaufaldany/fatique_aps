@@ -21,7 +21,7 @@ class _PreviewPredictPageState extends State<PreviewPredictPage> {
 
     try {
       // API endpoint
-      const String apiUrl = 'https://Mowzaaaa-fatigue-api.hf.space/predict';
+      const String apiUrl = 'https://mowzaaaa-fatigue-api.hf.space/predict';
 
       // Create multipart request - send original image (no compression)
       var request = http.MultipartRequest('POST', Uri.parse(apiUrl));
